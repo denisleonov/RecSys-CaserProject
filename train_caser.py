@@ -2,6 +2,7 @@ import argparse
 from tqdm.auto import tqdm
 
 import torch.optim as optim
+from attrdict import AttrDict
 import wandb
 from torch.nn.parallel import data_parallel
 
@@ -306,6 +307,7 @@ if __name__ == '__main__':
         'ac_conv': config.ac_conv,
         'ac_fc': config.ac_fc,
     }
+    model_config = AttrDict(model_config)
 
     # set seed
     set_seed(config.seed,
