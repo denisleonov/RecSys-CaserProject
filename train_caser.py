@@ -1,5 +1,5 @@
 import argparse
-from time import time
+from tqdm.auto import tqdm
 
 import torch.optim as optim
 import wandb
@@ -108,21 +108,15 @@ class Recommender(object):
         targets_np = train.sequences.targets
         users_np = train.sequences.user_ids.reshape(-1, 1)
 
-        L, T = train.sequences.L, train.sequences.T
-
         n_train = sequences_np.shape[0]
 
-        output_str = 'total training instances: %d' % n_train
-        print(output_str)
+        print('total training instances: %d' % n_train)
 
         if not self._initialized:
             self._initialize(train)
 
-        start_epoch = 0
-
-        for epoch_num in range(start_epoch, self._n_iter):
-
-            t1 = time()
+        epoch_pbar = tqdm(range(0, self._n_iter), total=self._n_iter)
+        for epoch_num in epoch_pbar:
 
             # set model to training mode
             self._net.train()
@@ -145,16 +139,10 @@ class Recommender(object):
                                                     negatives.to(self._device))
 
             epoch_loss = 0.0
+            batch_pbar = tqdm(enumerate(minibatch(users, sequences, targets, negatives, batch_size=self._batch_size)),
+                              total=len(users) // self._batch_size, leave=True)
 
-            for (minibatch_num,
-                 (batch_users,
-                  batch_sequences,
-                  batch_targets,
-                  batch_negatives)) in enumerate(minibatch(users,
-                                                           sequences,
-                                                           targets,
-                                                           negatives,
-                                                           batch_size=self._batch_size)):
+            for (minibatch_num, (batch_users, batch_sequences, batch_targets, batch_negatives)) in batch_pbar:
                 items_to_predict = torch.cat((batch_targets, batch_negatives), 1)
 
                 if self._ngpus > 1:
@@ -283,6 +271,7 @@ class Recommender(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+
     # data arguments
     parser.add_argument('--train_root', type=str, default='datasets/ml1m/train.txt')
     parser.add_argument('--test_root', type=str, default='datasets/ml1m/test.txt')
@@ -299,19 +288,24 @@ if __name__ == '__main__':
     parser.add_argument('--n_gpus', type=int, default=None)
     parser.add_argument('--wandb', type=str, default='test')
 
+    parser.add_argument('--d', type=int, default=50)
+    parser.add_argument('--nv', type=int, default=4)
+    parser.add_argument('--nh', type=int, default=16)
+    parser.add_argument('--drop', type=float, default=0.5)
+    parser.add_argument('--ac_conv', type=str, default='relu')
+    parser.add_argument('--ac_fc', type=str, default='relu')
+
     config = parser.parse_args()
 
-    # model dependent arguments
-    model_parser = argparse.ArgumentParser()
-    model_parser.add_argument('--d', type=int, default=50)
-    model_parser.add_argument('--nv', type=int, default=4)
-    model_parser.add_argument('--nh', type=int, default=16)
-    model_parser.add_argument('--drop', type=float, default=0.5)
-    model_parser.add_argument('--ac_conv', type=str, default='relu')
-    model_parser.add_argument('--ac_fc', type=str, default='relu')
-
-    model_config = model_parser.parse_args()
-    model_config.L = config.L
+    model_config = {
+        'L': config.L,
+        'd': config.d,
+        'nv': config.nv,
+        'nh': config.nh,
+        'drop': config.drop,
+        'ac_conv': config.ac_conv,
+        'ac_fc': config.ac_fc,
+    }
 
     # set seed
     set_seed(config.seed,
@@ -334,7 +328,6 @@ if __name__ == '__main__':
                         item_map=train.item_map)
 
     print(config)
-    print(model_config)
     # fit model
     model = Recommender(n_iter=config.n_iter,
                         batch_size=config.batch_size,
