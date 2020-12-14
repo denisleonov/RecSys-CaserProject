@@ -116,32 +116,34 @@ class Recommender(object):
         if not self._initialized:
             self._initialize(train)
 
-        epoch_pbar = tqdm(range(0, self._n_iter), total=self._n_iter)
+        epoch_pbar = tqdm(range(0, self._n_iter), total=self._n_iter, desc='Train')
         for epoch_num in epoch_pbar:
 
             # set model to training mode
             self._net.train()
+            
+            if epoch_num % 5 == 0 or epoch_num == 0:
+                
+                users_np, sequences_np, targets_np = shuffle(users_np,
+                                                             sequences_np,
+                                                             targets_np)
 
-            users_np, sequences_np, targets_np = shuffle(users_np,
-                                                         sequences_np,
-                                                         targets_np)
+                negatives_np = self._generate_negative_samples(users_np, train, n=self._neg_samples)
 
-            negatives_np = self._generate_negative_samples(users_np, train, n=self._neg_samples)
+                # convert numpy arrays to PyTorch tensors and move it to the corresponding devices
+                users, sequences, targets, negatives = (torch.from_numpy(users_np).long(),
+                                                        torch.from_numpy(sequences_np).long(),
+                                                        torch.from_numpy(targets_np).long(),
+                                                        torch.from_numpy(negatives_np).long())
 
-            # convert numpy arrays to PyTorch tensors and move it to the corresponding devices
-            users, sequences, targets, negatives = (torch.from_numpy(users_np).long(),
-                                                    torch.from_numpy(sequences_np).long(),
-                                                    torch.from_numpy(targets_np).long(),
-                                                    torch.from_numpy(negatives_np).long())
-
-            users, sequences, targets, negatives = (users.to(self._device),
-                                                    sequences.to(self._device),
-                                                    targets.to(self._device),
-                                                    negatives.to(self._device))
+                users, sequences, targets, negatives = (users.to(self._device),
+                                                        sequences.to(self._device),
+                                                        targets.to(self._device),
+                                                        negatives.to(self._device))
 
             epoch_loss = 0.0
             batch_pbar = tqdm(enumerate(minibatch(users, sequences, targets, negatives, batch_size=self._batch_size)),
-                              total=len(users) // self._batch_size, leave=True)
+                              total=len(users) // self._batch_size, leave=True, desc=f'Epoch: {epoch_num + 1}')
 
             for (minibatch_num, (batch_users, batch_sequences, batch_targets, batch_negatives)) in batch_pbar:
                 items_to_predict = torch.cat((batch_targets, batch_negatives), 1)
@@ -174,7 +176,8 @@ class Recommender(object):
 
             epoch_loss /= minibatch_num + 1
 
-            if verbose and (epoch_num + 1) % 2 == 0:
+            # if verbose:
+            if verbose and (epoch_num + 1) % 5 == 0:
                 precision, recall, ndcgs, mean_aps = evaluate_ranking(self, test, train, k=[1, 5, 10])
                 logdict = {
                     'loss': epoch_loss,
@@ -329,7 +332,6 @@ if __name__ == '__main__':
                         user_map=train.user_map,
                         item_map=train.item_map)
 
-    print(config)
     # fit model
     model = Recommender(n_iter=config.n_iter,
                         batch_size=config.batch_size,

@@ -1,4 +1,5 @@
 import numpy as np
+from tqdm.auto import tqdm
 from sklearn.metrics import ndcg_score
 
 
@@ -50,7 +51,8 @@ def evaluate_ranking(model, test, train=None, k=10):
     k: int or array of int,
         The maximum number of predicted items
     """
-
+    
+    """
     test = test.tocsr()
 
     if train is not None:
@@ -66,7 +68,75 @@ def evaluate_ranking(model, test, train=None, k=10):
     ndcgs = [list() for _ in range(len(ks))]
     apks = list()
 
-    for user_id, row in enumerate(test):
+    test_pbar = tqdm(enumerate(test), total=test.shape[0], desc='Eval')
+    
+    for user_id, row in test_pbar:
+
+        if not len(row.indices):
+            continue
+
+        predictions = -model.predict(user_id)
+
+        if train is not None:
+            rated = set(train[user_id].indices)
+        else:
+            rated = []
+
+        predictions = [p for p in predictions if p not in rated]
+        predictions = np.array(predictions)
+        predictions_sorted_list = list(predictions.argsort())
+
+        targets_list = row.indices
+
+        for i, _k in enumerate(ks):
+            precision, recall = _compute_precision_recall(targets_list, predictions_sorted_list, _k)
+            precisions[i].append(precision)
+            recalls[i].append(recall)
+            
+            targets = np.zeros_like(predictions)
+            targets[targets_list] = 1.
+            
+            prd = predictions[np.newaxis, :]
+            tgt = targets[np.newaxis, :]
+            
+            ndcg = ndcg_score(tgt, prd, k=_k)
+            ndcgs[i].append(ndcg)
+
+        apks.append(_compute_apk(targets, predictions, k=np.inf))
+
+    precisions = [np.array(i) for i in precisions]
+    recalls = [np.array(i) for i in recalls]
+    ndcgs = [np.array(i) for i in ndcgs]
+
+    if not isinstance(k, list):
+        precisions = precisions[0]
+        recalls = recalls[0]
+        ndcgs = ndcgs[0]
+
+    mean_aps = np.mean(apks)
+
+    return precisions, recalls, ndcgs, mean_aps
+    """
+    
+    test = test.tocsr()
+
+    if train is not None:
+        train = train.tocsr()
+
+    if not isinstance(k, list):
+        ks = [k]
+    else:
+        ks = k
+
+    
+    precisions = [list() for _ in range(len(ks))]
+    recalls = [list() for _ in range(len(ks))]
+    ndcgs = [list() for _ in range(len(ks))]
+    apks = list()
+
+    test_pbar = tqdm(enumerate(test), total=test.shape[0], desc='Eval', leave=True)
+    
+    for user_id, row in test_pbar:
 
         if not len(row.indices):
             continue
@@ -87,7 +157,8 @@ def evaluate_ranking(model, test, train=None, k=10):
             precision, recall = _compute_precision_recall(targets, predictions, _k)
             precisions[i].append(precision)
             recalls[i].append(recall)
-            ndcg = ndcg_score(targets, predictions, k=_k)
+            # ndcg = ndcg_score(targets, predictions, k=_k)
+            ndcg = 0.
             ndcgs[i].append(ndcg)
 
         apks.append(_compute_apk(targets, predictions, k=np.inf))
