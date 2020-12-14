@@ -178,7 +178,8 @@ class Recommender(object):
 
             # if verbose:
             if verbose and (epoch_num + 1) % 5 == 0:
-                precision, recall, ndcgs, mean_aps = evaluate_ranking(self, test, train, k=[1, 5, 10])
+
+                precision, recall, mean_aps = evaluate_ranking(self, test, train, k=[1, 5, 10])
                 logdict = {
                     'loss': epoch_loss,
                     'map': mean_aps,
@@ -191,6 +192,9 @@ class Recommender(object):
                     'ndcg@1': np.mean(ndcgs[0]),
                     'ndcg@5': np.mean(ndcgs[1]),
                     'ndcg@10': np.mean(ndcgs[2]),
+                    'hr@1': np.mean(hrs[0]),
+                    'hr@5': np.mean(hrs[1]),
+                    'hr@10': np.mean(hrs[2]),
                 }
                 wandb.log(logdict, step=epoch_num)
 
@@ -277,8 +281,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # data arguments
-    parser.add_argument('--train_root', type=str, default='datasets/ml1m/train.txt')
-    parser.add_argument('--test_root', type=str, default='datasets/ml1m/test.txt')
+    parser.add_argument('--ds', type=str, default='ml1m', choices=['ml1m', 'gowalla'])
     parser.add_argument('--L', type=int, default=5)
     parser.add_argument('--T', type=int, default=3)
     # train arguments
@@ -301,6 +304,12 @@ if __name__ == '__main__':
 
     config = parser.parse_args()
 
+    DS2ROOTs = {
+        'ml1m': ('datasets/ml1m/train.txt', 'datasets/ml1m/test.txt'),
+        'gowalla': ('datasets/gowalla/train.txt', 'datasets/gowalla/test.txt'),
+    }
+    config.train_root, config.test_root = DS2ROOTs[config.ds]
+
     model_config = {
         'L': config.L,
         'd': config.d,
@@ -313,8 +322,7 @@ if __name__ == '__main__':
     model_config = AttrDict(model_config)
 
     # set seed
-    set_seed(config.seed,
-             cuda=config.use_cuda)
+    set_seed(config.seed, cuda=config.use_cuda)
 
     # wandb
     wandb.init(
