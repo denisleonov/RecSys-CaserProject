@@ -38,9 +38,9 @@ def run(train, test, validation, random_state, model_type):
 
 
 if __name__ == '__main__':
-    max_sequence_length = 200
+    max_sequence_length = 40
     min_sequence_length = 20
-    step_size = 200
+    step_size = 1
     random_state = np.random.RandomState(100)
 
     dataset = get_movielens_dataset('1M')

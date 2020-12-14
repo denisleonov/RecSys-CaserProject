@@ -4,20 +4,22 @@ import shutil
 from collections import namedtuple
 
 from sklearn.model_selection import ParameterSampler
-from spotlight.evaluation import sequence_mrr_score
 from spotlight.sequence.implicit import ImplicitSequenceModel
+from tqdm import tqdm
 
-from metricsEvaluator import sequence_ndcg_score, sequence_hr_score
+from metricsEvaluator import sequence_ndcg_score, sequence_hr_score, sequence_mrr_score
+
+import numpy as np
 
 CUDA = (os.environ.get('CUDA') is not None or
         shutil.which('nvidia-smi') is not None)
 
-LEARNING_RATES = [1e-3, 1e-2, 5 * 1e-2, 1e-1]
-LOSSES = ['bpr', 'hinge', 'adaptive_hinge', 'pointwise']
-BATCH_SIZE = [256]
+LEARNING_RATES = [1e-4, 1e-3, 1e-2]
+LOSSES = ['bpr', 'pointwise']
+BATCH_SIZE = [2048]
 EMBEDDING_DIM = [64, 128, 256]
-N_ITER = [20]
-L2 = [1e-5, 1e-3, 1e-2, 0.0, 0.1]
+N_ITER = [50]
+L2 = [1e-5, 1e-3, 1e-2]
 
 # LEARNING_RATES = [1e-3]
 # LOSSES = ['pointwise']
@@ -61,14 +63,27 @@ def evaluate_lstm_model(hyperparameters, train, test, validation, random_state):
                                   random_state=random_state)
     model.fit(train, verbose=True)
 
-    test_metrics = evaluate_metrics(model, test)
-    val_metrics = evaluate_metrics(model, validation)
+    test_metrics = evaluate_metrics(model, test, batch_size=h['batch_size'])
+    val_metrics = evaluate_metrics(model, validation, batch_size=h['batch_size'])
 
     return test_metrics, val_metrics
 
 
-def evaluate_metrics(model, test):
-    metrics = [sequence_mrr_score(model, test).mean()]
-    metrics.extend(sequence_ndcg_score(model, test, K).mean(axis=1))
-    metrics.extend(sequence_hr_score(model, test, K).mean(axis=1))
+def evaluate_metrics(model, test, batch_size):
+    predictions, targets = make_predictions_targets(model, test, batch_size, True)
+    metrics = [sequence_mrr_score(predictions, targets).mean()]
+    metrics.extend(sequence_ndcg_score(predictions, targets, K).mean(axis=1))
+    metrics.extend(sequence_hr_score(predictions, targets, K).mean(axis=1))
     return Metrics(*metrics)
+
+
+def make_predictions_targets(model, test, batch_size, exclude_preceding):
+    sequences = test.sequences[:, :-1]
+    targets = test.sequences[:, -1:]
+    predictions = []
+    for seq in tqdm(sequences, desc='Predictions'):
+        prediction = model.predict(seq)
+        if exclude_preceding:
+            prediction[seq] = np.finfo(np.float32).min  # minimal float
+        predictions.append(prediction)
+    return np.asarray(predictions), targets
