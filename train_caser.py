@@ -7,7 +7,7 @@ import wandb
 from torch.nn.parallel import data_parallel
 
 from caser import Caser
-from evaluation import compute_metrics
+from evaluation import compute_metrics, evaluate_hits_ndcg
 from interactions import Interactions
 from utils import *
 
@@ -183,6 +183,7 @@ class Recommender(object):
             if verbose and (epoch_num + 1) % 5 == 0:
                 precision, recall, mean_aps, ndcgs, hrs, mrr = compute_metrics(self, test, train, k=[1, 5, 10],
                                                                                tqdm_off=self.tqdm_off)
+                ndc, hts = evaluate_hits_ndcg(self, train, test)
                 logdict = {
                     'loss': epoch_loss,
                     'map': mean_aps,
@@ -199,6 +200,8 @@ class Recommender(object):
                     'hr@1': np.mean(hrs[0]),
                     'hr@5': np.mean(hrs[1]),
                     'hr@10': np.mean(hrs[2]),
+                    'ndcg': ndc,
+                    'hts': hts,
                 }
                 wandb.log(logdict, step=epoch_num + 1)
 

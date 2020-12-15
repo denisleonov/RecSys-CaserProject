@@ -112,3 +112,56 @@ def compute_metrics(model, test, train=None, k=10, tqdm_off=False):
     mrr = np.mean(mrrs)
 
     return precisions, recalls, mean_aps, ndcgs, hrs, mrr
+
+
+def sample_negatives(rated, n_items):
+    items = []
+    for _ in range(100):
+        cur = np.random.randint(0, n_items)
+        while cur in rated:
+            cur = np.random.randint(0, n_items)
+        items.append(cur)
+    return items
+
+
+def evaluate_hits_ndcg(model, train, test):
+    hits = []
+    ndcg = []
+    train_csr = train.tocsr()
+    test_csr = test.tocsr()
+
+    user_limit = 10000
+    user_ids = np.arange(train.num_users)
+
+    if len(user_ids) > user_limit:
+        user_ids = np.random.choice(user_ids, size=user_limit, replace=False)
+
+    for user_id in user_ids:
+        train_row = train_csr[user_id]
+        test_row = test_csr[user_id]
+
+        if not len(test_row.indices):
+            continue
+
+        test_item = test_row.indices[0]
+        if test_item >= train.num_items:
+            hits.append(False)
+            ndcg.append(0.)
+            continue
+
+        rated = set(train_row.indices)
+        negatives = sample_negatives(rated, train.num_items)
+
+        item_ids = [test_item] + negatives
+        item_ids = np.asarray(item_ids).reshape(-1, 1)
+
+        predictions = -model.predict(user_id, item_ids=item_ids)
+        rank = predictions.argsort().argsort()[0]
+
+        if rank < 10:
+            hits.append(True)
+            ndcg.append(1. / np.log2(rank + 2))
+        else:
+            hits.append(False)
+            ndcg.append(0.)
+    return np.average(hits), np.average(ndcg)
