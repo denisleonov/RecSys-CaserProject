@@ -117,7 +117,7 @@ class Caser(nn.Module):
             cue_att = cue_att.softmax(-1).unsqueeze(-1)  # (bs, L, 1)
 
             cue_embs = cue_att * cue_embs  # (bs, L, d)
-            user_emb = user_emb + cue_embs.sum(dim=1)  # (bs, d)
+            user_emb = cue_embs.sum(dim=1)  # (bs, d)
 
         if self.mh > 0:
             item_embs = item_embs.squeeze(1)
