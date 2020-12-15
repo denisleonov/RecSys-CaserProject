@@ -73,10 +73,8 @@ class Interactions(object):
 
         return len(self.user_ids)
 
+    """
     def tocoo(self):
-        """
-        Transform to a scipy.sparse COO matrix.
-        """
 
         row = self.user_ids
         col = self.item_ids
@@ -84,6 +82,14 @@ class Interactions(object):
 
         return sp.coo_matrix((data, (row, col)),
                              shape=(self.num_users, self.num_items))
+    """
+
+    def tocoo(self):
+
+        row = self.user_ids
+        col = self.item_ids
+        data = np.ones(len(self))
+        return sp.coo_matrix((data, (row, col)), shape=(self.num_users, max(col)+1))
 
     def tocsr(self):
         """

@@ -141,7 +141,8 @@ class Recommender(object):
                                                         negatives.to(self._device))
 
             epoch_loss = 0.0
-            batch_pbar = tqdm(enumerate(minibatch(users, sequences, targets, negatives, batch_size=self._batch_size)),
+            batch_pbar = tqdm(enumerate(minibatch(users, sequences, targets, negatives,  # noqa
+                                                  batch_size=self._batch_size)),
                               total=len(users) // self._batch_size, leave=True, desc=f'Epoch: {epoch_num + 1}')
 
             for (minibatch_num, (batch_users, batch_sequences, batch_targets, batch_negatives)) in batch_pbar:
@@ -173,7 +174,7 @@ class Recommender(object):
                 loss.backward()
                 self._optimizer.step()
 
-            epoch_loss /= minibatch_num + 1
+            epoch_loss /= minibatch_num + 1  # noqa
 
             # if verbose:
             if verbose and (epoch_num + 1) % 5 == 0:
@@ -195,7 +196,7 @@ class Recommender(object):
                     'hr@5': np.mean(hrs[1]),
                     'hr@10': np.mean(hrs[2]),
                 }
-                wandb.log(logdict, step=epoch_num)
+                wandb.log(logdict, step=epoch_num + 1)
 
     def _generate_negative_samples(self, users, interactions, n):
         """

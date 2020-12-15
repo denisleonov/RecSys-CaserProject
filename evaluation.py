@@ -106,8 +106,7 @@ def evaluate_ranking(model, test, train=None, k=10):
     return precisions, recalls, mean_aps
 
 
-def compute_metrics(model, test, train, k=10):
-    assert train is not None
+def compute_metrics(model, test, train=None, k=10):
     test = test.tocsr()
 
     if train is not None:
