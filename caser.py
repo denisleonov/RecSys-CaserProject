@@ -29,12 +29,16 @@ class Caser(nn.Module):
         # init args
         L = self.args.L
         dims = self.args.d
-        self.mh = self.args.mh
         self.n_h = self.args.nh
         self.n_v = self.args.nv
         self.drop_ratio = self.args.drop
         self.ac_conv = activation_getter[self.args.ac_conv]
         self.ac_fc = activation_getter[self.args.ac_fc]
+        # new features
+        self.mh = self.args.mh
+        self.mh_hd = self.args.mh_hd
+        self.mh_dp = self.args.mh_dp
+        self.cue = self.args.cue
 
         # user and item embeddings
         self.user_embeddings = nn.Embedding(num_users, dims)
@@ -42,9 +46,12 @@ class Caser(nn.Module):
 
         if self.mh > 0:
             encoder_layer = nn.TransformerEncoderLayer(
-                d_model=self.args.d, nhead=2,
-                dim_feedforward=2 * self.args.d, dropout=0.1)
+                d_model=self.args.d, nhead=self.mh_hd,
+                dim_feedforward=2 * self.args.d, dropout=self.mh_dp)
             self.trf_encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.mh)
+
+        if self.cue:
+            self.cue_ff = nn.Linear(2 * dims, dims)
 
         # vertical conv layer
         self.conv_v = nn.Conv2d(1, self.n_v, (L, 1))
@@ -95,6 +102,22 @@ class Caser(nn.Module):
         # Embedding Look-up
         item_embs = self.item_embeddings(seq_var).unsqueeze(1)  # use unsqueeze() to get 4-D
         user_emb = self.user_embeddings(user_var).squeeze(1)
+
+        if self.cue:
+            # stack
+            _, _, L, _ = item_embs.size()
+            cue_embs = torch.cat([
+                item_embs.squeeze(1),
+                user_emb.unsqueeze(1).repeat(1, L, 1),
+            ], dim=-1)
+            cue_embs = self.cue_ff(cue_embs)  # (bs, L, d)
+
+            cue_att = cue_embs * user_emb.unsqueeze(1)  # (bs, L, d)
+            cue_att = cue_att.sum(-1)  # (bs, L)
+            cue_att = cue_att.softmax(-1).unsqueeze(-1)  # (bs, L, 1)
+
+            cue_embs = cue_att * cue_embs  # (bs, L, d)
+            user_emb = user_emb + cue_embs.sum(dim=1)  # (bs, d)
 
         if self.mh > 0:
             item_embs = item_embs.squeeze(1)

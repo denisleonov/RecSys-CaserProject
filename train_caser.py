@@ -304,7 +304,12 @@ if __name__ == '__main__':
     parser.add_argument('--drop', type=float, default=0.5)
     parser.add_argument('--ac_conv', type=str, default='relu')
     parser.add_argument('--ac_fc', type=str, default='relu')
+
+    # new features
     parser.add_argument('--mh', type=int, default=0)
+    parser.add_argument('--mh_hd', type=int, default=2)
+    parser.add_argument('--mh_dp', type=float, default=0.1)
+    parser.add_argument('--cue', action='store_true', default=False)
 
     parser.add_argument('--tqdm_off', action='store_true', default=False)
 
@@ -325,6 +330,9 @@ if __name__ == '__main__':
         'ac_conv': config.ac_conv,
         'ac_fc': config.ac_fc,
         'mh': config.mh,
+        'mh_hd': config.mh_hd,
+        'mh_dp': config.mh_dp,
+        'cue': config.cue,
     }
     model_config = AttrDict(model_config)
 
