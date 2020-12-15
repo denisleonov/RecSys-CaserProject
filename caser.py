@@ -53,7 +53,6 @@ class Caser(nn.Module):
         if self.cue:
             self.cue_ff = nn.Linear(2 * dims, dims)
 
-
         # vertical conv layer
         self.conv_v = nn.Conv2d(1, self.n_v, (L, 1))
 
@@ -115,12 +114,12 @@ class Caser(nn.Module):
 
             user_emb = cue_embs.mean(dim=1)  # (bs, d)
 
-            # cue_att = cue_embs * user_emb.unsqueeze(1)  # (bs, L, d)
-            # cue_att = cue_att.sum(-1)  # (bs, L)
-            # cue_att = cue_att.softmax(-1).unsqueeze(-1)  # (bs, L, 1)
-            #
-            # cue_embs = cue_att * cue_embs  # (bs, L, d)
-            # user_emb = cue_embs.sum(dim=1)  # (bs, d)
+            cue_att = cue_embs * user_emb.unsqueeze(1)  # (bs, L, d)
+            cue_att = cue_att.sum(-1)  # (bs, L)
+            cue_att = cue_att.softmax(-1).unsqueeze(-1)  # (bs, L, 1)
+
+            cue_embs = cue_att * cue_embs  # (bs, L, d)
+            user_emb = cue_embs.sum(dim=1)  # (bs, d)
 
         if self.mh > 0:
             item_embs = item_embs.squeeze(1)
