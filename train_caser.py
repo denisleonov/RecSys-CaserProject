@@ -50,6 +50,7 @@ class Recommender(object):
                  use_cuda=False,
                  model_args=None,
                  ngpus=None,
+                 tqdm_off=False,
                  ):
 
         # model related
@@ -57,6 +58,7 @@ class Recommender(object):
         self._num_users = None
         self._net = None
         self.model_args = model_args
+        self.tqdm_off = tqdm_off
 
         # learning related
         self._batch_size = batch_size
@@ -116,7 +118,7 @@ class Recommender(object):
         if not self._initialized:
             self._initialize(train)
 
-        epoch_pbar = tqdm(range(0, self._n_iter), total=self._n_iter, desc='Train')
+        epoch_pbar = tqdm(range(0, self._n_iter), total=self._n_iter, desc='Train', disable=self.tqdm_off)
         for epoch_num in epoch_pbar:
 
             # set model to training mode
@@ -143,7 +145,8 @@ class Recommender(object):
             epoch_loss = 0.0
             batch_pbar = tqdm(enumerate(minibatch(users, sequences, targets, negatives,  # noqa
                                                   batch_size=self._batch_size)),
-                              total=len(users) // self._batch_size, leave=True, desc=f'Epoch: {epoch_num + 1}')
+                              total=len(users) // self._batch_size, leave=True, desc=f'Epoch: {epoch_num + 1}',
+                              disable=self.tqdm_off)
 
             for (minibatch_num, (batch_users, batch_sequences, batch_targets, batch_negatives)) in batch_pbar:
                 items_to_predict = torch.cat((batch_targets, batch_negatives), 1)
@@ -178,7 +181,8 @@ class Recommender(object):
 
             # if verbose:
             if verbose and (epoch_num + 1) % 5 == 0:
-                precision, recall, mean_aps, ndcgs, hrs, mrr = compute_metrics(self, test, train, k=[1, 5, 10])
+                precision, recall, mean_aps, ndcgs, hrs, mrr = compute_metrics(self, test, train, k=[1, 5, 10],
+                                                                               tqdm_off=self.tqdm_off)
                 logdict = {
                     'loss': epoch_loss,
                     'map': mean_aps,
@@ -300,6 +304,9 @@ if __name__ == '__main__':
     parser.add_argument('--drop', type=float, default=0.5)
     parser.add_argument('--ac_conv', type=str, default='relu')
     parser.add_argument('--ac_fc', type=str, default='relu')
+    parser.add_argument('--mh', type=int, default=0)
+
+    parser.add_argument('--tqdm_off', action='store_true', default=False)
 
     config = parser.parse_args()
 
@@ -317,6 +324,7 @@ if __name__ == '__main__':
         'drop': config.drop,
         'ac_conv': config.ac_conv,
         'ac_fc': config.ac_fc,
+        'mh': config.mh,
     }
     model_config = AttrDict(model_config)
 
@@ -347,6 +355,7 @@ if __name__ == '__main__':
                         neg_samples=config.neg_samples,
                         model_args=model_config,
                         use_cuda=config.use_cuda,
-                        ngpus=config.n_gpus)
+                        ngpus=config.n_gpus,
+                        tqdm_off=config.tqdm_off)
 
     model.fit(train, test, verbose=True)

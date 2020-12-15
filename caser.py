@@ -29,6 +29,7 @@ class Caser(nn.Module):
         # init args
         L = self.args.L
         dims = self.args.d
+        self.mh = self.args.mh
         self.n_h = self.args.nh
         self.n_v = self.args.nv
         self.drop_ratio = self.args.drop
@@ -38,6 +39,12 @@ class Caser(nn.Module):
         # user and item embeddings
         self.user_embeddings = nn.Embedding(num_users, dims)
         self.item_embeddings = nn.Embedding(num_items, dims)
+
+        if self.mh > 0:
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=self.args.d, nhead=2,
+                dim_feedforward=2 * self.args.d, dropout=0.1)
+            self.trf_encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.mh)
 
         # vertical conv layer
         self.conv_v = nn.Conv2d(1, self.n_v, (L, 1))
@@ -88,6 +95,11 @@ class Caser(nn.Module):
         # Embedding Look-up
         item_embs = self.item_embeddings(seq_var).unsqueeze(1)  # use unsqueeze() to get 4-D
         user_emb = self.user_embeddings(user_var).squeeze(1)
+
+        if self.mh > 0:
+            item_embs = item_embs.squeeze(1)
+            item_embs = self.trf_encoder(item_embs)
+            item_embs = item_embs.unsqueeze(1)
 
         # Convolutional Layers
         out, out_h, out_v = None, None, None
