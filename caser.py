@@ -52,6 +52,10 @@ class Caser(nn.Module):
 
         if self.cue:
             self.cue_ff = nn.Linear(2 * dims, dims)
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=self.args.d, nhead=2,
+                dim_feedforward=2 * self.args.d, dropout=0.1)
+            self.cue_encoder = nn.TransformerEncoder(encoder_layer, num_layers=2)
 
         # vertical conv layer
         self.conv_v = nn.Conv2d(1, self.n_v, (L, 1))
@@ -112,12 +116,14 @@ class Caser(nn.Module):
             ], dim=-1)
             cue_embs = self.cue_ff(cue_embs)  # (bs, L, d)
 
-            cue_att = cue_embs * user_emb.unsqueeze(1)  # (bs, L, d)
-            cue_att = cue_att.sum(-1)  # (bs, L)
-            cue_att = cue_att.softmax(-1).unsqueeze(-1)  # (bs, L, 1)
+            user_emb = self.cue_encoder(cue_embs).sum(dim=1)  # (bs, d)
 
-            cue_embs = cue_att * cue_embs  # (bs, L, d)
-            user_emb = cue_embs.sum(dim=1)  # (bs, d)
+            # cue_att = cue_embs * user_emb.unsqueeze(1)  # (bs, L, d)
+            # cue_att = cue_att.sum(-1)  # (bs, L)
+            # cue_att = cue_att.softmax(-1).unsqueeze(-1)  # (bs, L, 1)
+            #
+            # cue_embs = cue_att * cue_embs  # (bs, L, d)
+            # user_emb = cue_embs.sum(dim=1)  # (bs, d)
 
         if self.mh > 0:
             item_embs = item_embs.squeeze(1)
