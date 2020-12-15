@@ -7,7 +7,7 @@ import wandb
 from torch.nn.parallel import data_parallel
 
 from caser import Caser
-from evaluation import evaluate_ranking
+from evaluation import compute_metrics
 from interactions import Interactions
 from utils import *
 
@@ -121,9 +121,8 @@ class Recommender(object):
 
             # set model to training mode
             self._net.train()
-            
+
             if epoch_num % 5 == 0 or epoch_num == 0:
-                
                 users_np, sequences_np, targets_np = shuffle(users_np,
                                                              sequences_np,
                                                              targets_np)
@@ -178,11 +177,11 @@ class Recommender(object):
 
             # if verbose:
             if verbose and (epoch_num + 1) % 5 == 0:
-
-                precision, recall, mean_aps = evaluate_ranking(self, test, train, k=[1, 5, 10])
+                precision, recall, mean_aps, ndcgs, hrs, mrr = compute_metrics(self, test, train, k=[1, 5, 10])
                 logdict = {
                     'loss': epoch_loss,
                     'map': mean_aps,
+                    'mrr': mrr,
                     'prec@1': np.mean(precision[0]),
                     'prec@5': np.mean(precision[1]),
                     'prec@10': np.mean(precision[2]),
@@ -197,7 +196,6 @@ class Recommender(object):
                     'hr@10': np.mean(hrs[2]),
                 }
                 wandb.log(logdict, step=epoch_num)
-
 
     def _generate_negative_samples(self, users, interactions, n):
         """
@@ -285,7 +283,7 @@ if __name__ == '__main__':
     parser.add_argument('--L', type=int, default=5)
     parser.add_argument('--T', type=int, default=3)
     # train arguments
-    parser.add_argument('--n_iter', type=int, default=50)
+    parser.add_argument('--n_iter', type=int, default=30)
     parser.add_argument('--seed', type=int, default=1234)
     parser.add_argument('--batch_size', type=int, default=512)
     parser.add_argument('--learning_rate', type=float, default=1e-3)

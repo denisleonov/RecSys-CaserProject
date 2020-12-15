@@ -3,13 +3,11 @@ import numpy as np
 import scipy.stats as st
 from sklearn.metrics import ndcg_score
 
-
 FLOAT_MIN = np.finfo(np.float32).min
 FLOAT_MAX = np.finfo(np.float32).max
 
 
 def _compute_apk(targets, predictions, k):
-
     if len(predictions) > k:
         predictions = predictions[:k]
 
@@ -28,7 +26,6 @@ def _compute_apk(targets, predictions, k):
 
 
 def _compute_precision_recall(targets, predictions, k):
-
     pred = predictions[:k]
     num_hit = len(set(pred).intersection(set(targets)))
     precision = float(num_hit) / len(pred)
@@ -56,7 +53,7 @@ def evaluate_ranking(model, test, train=None, k=10):
     k: int or array of int,
         The maximum number of predicted items
     """
-    
+
     test = test.tocsr()
 
     if train is not None:
@@ -71,8 +68,8 @@ def evaluate_ranking(model, test, train=None, k=10):
     recalls = [list() for _ in range(len(ks))]
     apks = list()
 
-    test_pbar = tqdm(enumerate(test), total=test.shape[0], desc='Eval', leave=True)
-    
+    test_pbar = tqdm(enumerate(test), total=test.shape[0], desc='Eval / Precision and Recall', leave=True)
+
     for user_id, row in test_pbar:
 
         if not len(row.indices):
@@ -109,34 +106,83 @@ def evaluate_ranking(model, test, train=None, k=10):
     return precisions, recalls, mean_aps
 
 
-def sequence_hr_score(model, test, k=(1, 5, 10), exclude_preceding=True):
-    sequences = test.sequences[:, :-1]
-    targets = test.sequences[:, -1:]
+def compute_metrics(model, test, train, k=10):
+    assert train is not None
+    test = test.tocsr()
 
-    hrs = [[] for _ in k]
-    for seq, target in zip(sequences, targets):
-        predictions = -model.predict(seq)
+    if train is not None:
+        train = train.tocsr()
 
-        if exclude_preceding:
-            predictions[seq] = FLOAT_MAX
+    if not isinstance(k, list):
+        ks = [k]
+    else:
+        ks = k
 
-        target_ranks = st.rankdata(predictions, method='min')[target]
-        for i in range(len(k)):
-            hrs[i].append((target_ranks <= k[i]).mean())
-    return np.array(hrs)
+    ndcgs = [list() for _ in range(len(ks))]
+    hrs = [list() for _ in range(len(ks))]
+    precisions = [list() for _ in range(len(ks))]
+    recalls = [list() for _ in range(len(ks))]
+    apks = []
+    mrrs = []
 
+    test_pbar = tqdm(enumerate(test), total=test.shape[0], desc='Eval', leave=True)
 
-def sequence_ndcg_score(model, test, k=(1, 5, 10), exclude_preceding=True):
-    sequences = test.sequences[:, :-1]
-    targets = test.sequences[:, -1:]
+    for user_id, row in test_pbar:
 
-    ndcgs = [[] for _ in k]
-    for seq, target in zip(sequences, targets):
-        predictions = model.predict(seq)
+        if not len(row.indices):
+            continue
+
+        predictions = model.predict(user_id)
+        targets = row.indices
+
+        predictions = np.array(predictions)
+
+        if train is not None:
+            # P and R:
+            predictions_pr = np.copy(predictions)
+            predictions_pr = (-predictions_pr).argsort()
+            rated = set(train[user_id].indices)
+            predictions_pr = [p for p in predictions_pr if p not in rated]
+            # NDCG
+            predictions_ndcg = np.copy(predictions)
+            predictions_ndcg[train[user_id].indices] = FLOAT_MIN
+            # HR
+            predictions_hr = np.copy(predictions)
+            predictions_hr = - predictions_hr
+            predictions_hr[train[user_id].indices] = FLOAT_MAX
+            # MRR
+            predictions_mrr = np.copy(predictions)
+            predictions_mrr = - predictions_mrr
+            predictions_mrr[train[user_id].indices] = FLOAT_MAX
+
+        # NDCG
         ground_truth = np.zeros_like(predictions)
-        ground_truth[target] = 1
-        if exclude_preceding:
-            predictions[seq] = FLOAT_MIN
-        for i in range(len(k)):
-            ndcgs[i].append(ndcg_score([ground_truth], [predictions], k=k[i]))
-    return np.array(ndcgs)
+        ground_truth[targets] = 1
+        # HR
+        target_ranks = st.rankdata(predictions_hr, method='min')[targets]  # noqa
+
+        for i, _k in enumerate(ks):
+            precision, recall = _compute_precision_recall(targets, predictions_pr, _k) # noqa
+            precisions[i].append(precision)
+            recalls[i].append(recall)
+            ndcgs[i].append(ndcg_score([ground_truth], [predictions_ndcg], k=_k)) # noqa
+            hrs[i].append((target_ranks <= _k).mean())
+
+        mrrs.append((1.0 / st.rankdata(predictions_mrr)[targets]).mean()) # noqa
+        apks.append(_compute_apk(targets, predictions_pr, k=np.inf))
+
+    precisions = [np.array(i) for i in precisions]
+    recalls = [np.array(i) for i in recalls]
+    ndcgs = [np.array(i) for i in ndcgs]
+    hrs = [np.array(i) for i in hrs]
+
+    if not isinstance(k, list):
+        ndcgs = ndcgs[0]
+        hrs = hrs[0]
+        precisions = precisions[0]
+        recalls = recalls[0]
+
+    mean_aps = np.mean(apks)
+    mrr = np.mean(mrrs)
+
+    return precisions, recalls, mean_aps, ndcgs, hrs, mrr
